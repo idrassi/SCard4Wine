@@ -129,8 +129,29 @@ SCardSetAttribPtr            liteSCardSetAttrib            = NULL;
 static void* g_pcscliteHandle = NULL;
 static BOOL InitializePCSCLite(void);
 
+#define PCSCLITE_SCARD_PROTOCOL_RAW    0x00000004
 
+static DWORD_LITE
+ms_proto2lite_proto(DWORD dwProtocol)
+{
+	if (dwProtocol & SCARD_PROTOCOL_RAW)
+	{
+		dwProtocol ^= SCARD_PROTOCOL_RAW;
+		dwProtocol |= PCSCLITE_SCARD_PROTOCOL_RAW;
+	}
+	return (DWORD_LITE)dwProtocol;
+}
 
+static DWORD
+lite_proto2ms_proto(DWORD_LITE dwProtocol)
+{
+	if (dwProtocol & PCSCLITE_SCARD_PROTOCOL_RAW)
+	{
+		dwProtocol ^= PCSCLITE_SCARD_PROTOCOL_RAW;
+		dwProtocol |= SCARD_PROTOCOL_RAW;
+	}
+	return (DWORD)dwProtocol;
+}
 
 HANDLE g_startedEvent = NULL;
 
@@ -1269,9 +1290,6 @@ LONG WINAPI SCardIsValidContext(SCARDCONTEXT hContext)
         return TranslateToWin32(liteSCardIsValidContext(hContext));
 }
 
-
-#define PCSCLITE_SCARD_PROTOCOL_RAW    0x00000004
-
 LONG WINAPI SCardConnectA(SCARDCONTEXT hContext,
                         LPCSTR szReader,
                         DWORD dwShareMode,
@@ -1515,7 +1533,7 @@ LONG WINAPI SCardStatusA(
         lRet = SCARD_F_INTERNAL_ERROR;
     else
     {
-		DWORD_LITE dwNameLen = 0,dwAtrLen=MAX_ATR_SIZE, dwState, dwProtocol;
+		DWORD_LITE dwNameLen = 0,dwAtrLen=MAX_ATR_SIZE, dwState, dwProtocol = 0;
 		LPDWORD_LITE pdwStateLite = NULL, pdwProtocolLite = NULL, pdwNameLenLite = NULL, pdwAtrLenLite = NULL;
 		BYTE atr[MAX_ATR_SIZE];
 		if (pdwState)
@@ -1525,7 +1543,6 @@ LONG WINAPI SCardStatusA(
 		}
 		if (pdwProtocol)
 		{
-			dwProtocol = *pdwProtocol;
 			pdwProtocolLite = &dwProtocol;
 		}
 
@@ -1543,7 +1560,7 @@ LONG WINAPI SCardStatusA(
 			}
 			if (pdwProtocol)
 			{
-				*pdwProtocol = (DWORD) dwProtocol;
+				*pdwProtocol = lite_proto2ms_proto(dwProtocol);
 			}
             if(lRet != SCARD_S_SUCCESS && lRet != SCARD_E_INSUFFICIENT_BUFFER)
                 goto end_label;
@@ -1654,7 +1671,7 @@ LONG WINAPI SCardStatusA(
 			}
 			if (pdwProtocol)
 			{
-				*pdwProtocol = (DWORD) dwProtocol;
+				*pdwProtocol = lite_proto2ms_proto(dwProtocol);
 			}			
 			if (pcchReaderLen)
 			{
@@ -1948,13 +1965,13 @@ LONG WINAPI SCardTransmit(
 			pdwRecvLengthLite = &dwRecvLength;
 		}
 		
-		
-		if (pioRecvPci)
-			ioRecvPci.dwProtocol = pioRecvPci->dwProtocol;
+		if (pioRecvPci) {
+			ioRecvPci.dwProtocol = ms_proto2lite_proto(pioRecvPci->dwProtocol);
+		}
 		
         if(pioSendPci)
 		{
-			ioSendPci.dwProtocol = pioSendPci->dwProtocol;
+			ioSendPci.dwProtocol = ms_proto2lite_proto(pioSendPci->dwProtocol);
 		}
 		else
         {
@@ -1965,16 +1982,11 @@ LONG WINAPI SCardTransmit(
             lRet = SCardStatusA(hCard,NULL,&dwNameLen,&dwState,&protocol,NULL,&dwAtrLen);
             if(lRet == SCARD_S_SUCCESS)
             {
-                if(protocol == SCARD_PROTOCOL_T0)
-                    ioSendPci.dwProtocol = g_rgSCardT0Pci.dwProtocol;
-                else if(protocol == SCARD_PROTOCOL_T1)
-                    ioSendPci.dwProtocol = g_rgSCardT1Pci.dwProtocol;
-                else if(protocol == SCARD_PROTOCOL_RAW)
-                    ioSendPci.dwProtocol = g_rgSCardRawPci.dwProtocol;            }
+            	ioSendPci.dwProtocol = ms_proto2lite_proto(protocol);
+            }
 			else
 				goto transmit_end;
         }
-        
         lRet = liteSCardTransmit(hCard,&ioSendPci,pbSendBuffer,cbSendLength,pioRecvPci? &ioRecvPci : NULL,pbRecvBuffer,pdwRecvLengthLite);
 		if (pcbRecvLength)
 			*pcbRecvLength = dwRecvLength;
