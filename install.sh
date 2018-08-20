@@ -22,6 +22,7 @@ fi
 
 if [ -d "$WINE_LIB32_PREFIX" ]; then
 	/usr/bin/install -c   32-bit/winscard.dll.so $WINE_LIB32_PREFIX/winscard.dll.so
+	/usr/bin/install -c   32-bit/winscard.dll.fake $WINE_LIB32_PREFIX/fakedlls/winscard.dll
 	/usr/bin/install -c  -m 644 32-bit/libwinscard.def $WINE_LIB32_PREFIX/libwinscard.def
 	echo "New 32-Bit Winscard dll installed successfully."
 	INSTALLATION_OK=1
@@ -29,6 +30,7 @@ fi
 
 if [ -d "$WINE_LIB64_PREFIX" ]; then
 	/usr/bin/install -c   64-bit/winscard.dll.so $WINE_LIB64_PREFIX/winscard.dll.so
+	/usr/bin/install -c   64-bit/winscard.dll.fake $WINE_LIB64_PREFIX/fakedlls/winscard.dll
 	/usr/bin/install -c  -m 644 64-bit/libwinscard.def $WINE_LIB64_PREFIX/libwinscard.def
 	echo "New 64-Bit Winscard dll installed successfully."
 	INSTALLATION_OK=1
