@@ -423,16 +423,36 @@ static LONG ConvertListToANSI(LPCWSTR szListW,LPSTR* pszListA,LPDWORD pdwLength)
     else
     {
         LPSTR szStr = NULL;
-        DWORD alen = 0;
+        int wlen = 0, alen = 0, totallen = 0;    
+        LPCWSTR szListWPtr = szListW;
         
-        alen = WideCharToMultiByte(CP_ACP,0,szListW,-1,NULL,0,NULL,NULL);
+        /* compute size of wide-char multi-string */
+        while (*szListWPtr)
+        {
+			wlen = lstrlenW (szListWPtr) + 1;
+
+			totallen += wlen;
+			szListWPtr += wlen;
+		}
+		
+		totallen++;
+		
+		alen = WideCharToMultiByte(CP_ACP, 0, szListW, totallen, NULL, 0, NULL, NULL);
+		if (alen == 0)
+			return SCARD_F_INTERNAL_ERROR;
         
         /* allocate memory */
-        szStr = (LPSTR) SCardAllocate(alen);
+        szStr = (LPSTR) SCardAllocate (alen);
         if(!szStr)
-            return SCARD_F_INTERNAL_ERROR;
+            return SCARD_E_NO_MEMORY;
         
-        WideCharToMultiByte(CP_ACP,0,szListW,-1,szStr,alen,NULL,NULL);
+        /* perform the conversion */
+		alen = WideCharToMultiByte(CP_ACP, 0, szListW, totallen, szStr, alen, NULL, NULL);
+		if (alen == 0)
+		{
+			SCardFree (szStr);
+			return SCARD_F_INTERNAL_ERROR;
+		}
         
         *pszListA = szStr;
         *pdwLength = alen;
@@ -465,16 +485,36 @@ static LONG ConvertListToWideChar(LPCSTR szListA,LPWSTR* pszListW,LPDWORD pdwLen
     else
     {
         LPWSTR szStr = NULL;
-        DWORD wlen = 0;    
+        int wlen = 0, alen = 0, totallen = 0;    
+        LPCSTR szListAPtr = szListA;
         
-        wlen = MultiByteToWideChar(CP_ACP,0,szListA,-1,NULL,0);
+        /* compute size of ANSI multi-string */
+        while (*szListAPtr)
+        {
+			alen = lstrlenA (szListAPtr) + 1;
+
+			totallen += alen;
+			szListAPtr += alen;
+		}
+		
+		totallen++;
+		
+		wlen = MultiByteToWideChar(CP_ACP, 0, szListA, totallen, NULL, 0);
+		if (wlen == 0)
+			return SCARD_F_INTERNAL_ERROR;
         
         /* allocate memory */
-        szStr = (LPWSTR) SCardAllocate(wlen*sizeof(WCHAR));
+        szStr = (LPWSTR) SCardAllocate (wlen * sizeof (WCHAR));
         if(!szStr)
-            return SCARD_F_INTERNAL_ERROR;
+            return SCARD_E_NO_MEMORY;
         
-        MultiByteToWideChar(CP_ACP,0,szListA,-1,szStr,wlen);
+        /* perform the conversion */
+		wlen = MultiByteToWideChar(CP_ACP, 0, szListA, totallen, szStr, wlen);
+		if (wlen == 0)
+		{
+			SCardFree (szStr);
+			return SCARD_F_INTERNAL_ERROR;
+		}
         
         *pszListW = szStr;
         *pdwLength = wlen;
@@ -1801,7 +1841,7 @@ LONG WINAPI SCardGetStatusChangeA(
                 {
                     DWORD dwState = pStates[i].dwEventState & (~SCARD_STATE_CHANGED);
                     rgReaderStates[i].cbAtr = pStates[i].cbAtr;
-                    memcpy(rgReaderStates[i].rgbAtr,pStates[i].rgbAtr,rgReaderStates[i].cbAtr);                    
+                    memcpy(rgReaderStates[i].rgbAtr,pStates[i].rgbAtr,min (rgReaderStates[i].cbAtr, sizeof (rgReaderStates[i].rgbAtr)));                    
                     
                     if(dwState != rgReaderStates[i].dwCurrentState)
                     {
@@ -1823,8 +1863,8 @@ LONG WINAPI SCardGetStatusChangeA(
 			{
 				pStates[i].dwCurrentState = rgReaderStates[i].dwCurrentState;
 				pStates[i].dwEventState = rgReaderStates[i].dwEventState;
-				pStates[i].cbAtr = rgReaderStates[i].cbAtr;
-				memcpy(pStates[i].rgbAtr,rgReaderStates[i].rgbAtr,rgReaderStates[i].cbAtr);
+				pStates[i].cbAtr = min (MAX_ATR_SIZE, rgReaderStates[i].cbAtr);
+				memcpy(pStates[i].rgbAtr,rgReaderStates[i].rgbAtr,pStates[i].cbAtr);
 			}
 			
             lRet = liteSCardGetStatusChange(hContext,dwTimeout,pStates,cReaders);
@@ -1833,7 +1873,7 @@ LONG WINAPI SCardGetStatusChangeA(
 				rgReaderStates[i].dwCurrentState = pStates[i].dwCurrentState;
 				rgReaderStates[i].dwEventState = pStates[i].dwEventState;
 				rgReaderStates[i].cbAtr = pStates[i].cbAtr;
-				memcpy(rgReaderStates[i].rgbAtr,pStates[i].rgbAtr,pStates[i].cbAtr);
+				memcpy(rgReaderStates[i].rgbAtr,pStates[i].rgbAtr, MAX_ATR_SIZE);
 			}			
 		}
 		
@@ -1882,7 +1922,7 @@ LONG WINAPI SCardGetStatusChangeW(
             rgReaderStatesAnsi[i].dwCurrentState = rgReaderStates[i].dwCurrentState;
             rgReaderStatesAnsi[i].dwEventState = rgReaderStates[i].dwEventState;
             rgReaderStatesAnsi[i].cbAtr = rgReaderStates[i].cbAtr;        
-            memcpy(rgReaderStatesAnsi[i].rgbAtr,rgReaderStates[i].rgbAtr,rgReaderStates[i].cbAtr);
+            memcpy(rgReaderStatesAnsi[i].rgbAtr,rgReaderStates[i].rgbAtr, sizeof (rgReaderStatesAnsi[i].rgbAtr));
         }
         
         if(i < cReaders)
@@ -1895,7 +1935,7 @@ LONG WINAPI SCardGetStatusChangeW(
             {
                 rgReaderStates[i].dwEventState = rgReaderStatesAnsi[i].dwEventState;
                 rgReaderStates[i].cbAtr = rgReaderStatesAnsi[i].cbAtr;        
-                memcpy(rgReaderStates[i].rgbAtr,rgReaderStatesAnsi[i].rgbAtr,MAX_ATR_SIZE);                        
+                memcpy(rgReaderStates[i].rgbAtr,rgReaderStatesAnsi[i].rgbAtr, sizeof (rgReaderStates[i].rgbAtr));                        
             }               
         }
         /* free memory */
